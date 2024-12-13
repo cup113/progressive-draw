@@ -49,18 +49,17 @@ export const useEntrantsStore = defineStore("entrants", () => {
     const settings = useSettingsStore();
     const entrants: Entrant[] = reactive([]);
     const maxDistance = computed(() => Math.max(...entrants.filter(entrant => !entrant.won).map(entrant => entrant.distance)));
-    const rankedEntrants = computed(() => entrants.sort((a, b) => {
-        if (a.won !== b.won) {
-            return b.won ? 1 : -1;
-        }
+    const rankedEntrants = computed(() => entrants.filter(entrant => !entrant.won).sort((a, b) => {
         return b.distance - a.distance;
     }).slice(0, 20 /* TODO magic number */));
+    const winners = computed(() => entrants.filter(entrant => entrant.won));
+    const nextWinSec = ref<number>(0);
     const handle = ref<ReturnType<typeof setInterval> | undefined>();
 
     watch(() => settings.settings.nameList, nameList => {
         const newEntrants = nameList.map(name => new Entrant(name));
         entrants.splice(0, entrants.length, ...newEntrants);
-    }, { immediate: true });
+    }, { immediate: true, deep: true });
 
     function start_draw(times: number) {
         if (handle.value) {
@@ -70,9 +69,9 @@ export const useEntrantsStore = defineStore("entrants", () => {
         const winners = new Set<Entrant>();
         entrants.forEach(entrant => entrant.reset());
 
-        let nextWinSec = settings.settings.drawFirstSec;
+        nextWinSec.value = settings.settings.drawFirstSec;
         handle.value = setInterval(() => {
-            nextWinSec -= 1 / settings.settings.changePerSec;
+            nextWinSec.value -= 1 / settings.settings.changePerSec;
             console.time("update & move");
             for (const entrant of entrants) {
                 entrant.updateForce(Math.random() - 0.5, settings.settings.kForceFade);
@@ -80,8 +79,8 @@ export const useEntrantsStore = defineStore("entrants", () => {
             }
             console.timeEnd("update & move");
             console.time("check winner");
-            if (nextWinSec <= 0) {
-                nextWinSec += settings.settings.drawIntervalSec;
+            if (nextWinSec.value <= 0) {
+                nextWinSec.value += settings.settings.drawIntervalSec;
                 const winner = entrants.find(entrant => entrant.distance === maxDistance.value);
                 if (!winner) {
                     console.warn("No winner found");
@@ -102,6 +101,9 @@ export const useEntrantsStore = defineStore("entrants", () => {
         entrants,
         rankedEntrants,
         maxDistance,
+        winners,
+        nextWinSec,
+        handle,
         start_draw,
     }
 });
