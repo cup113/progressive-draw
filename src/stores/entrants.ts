@@ -49,10 +49,50 @@ export const useEntrantsStore = defineStore("entrants", () => {
     const settings = useSettingsStore();
     const entrants: Entrant[] = reactive([]);
     const maxDistance = computed(() => Math.max(...entrants.filter(entrant => !entrant.won).map(entrant => entrant.distance)));
-    const rankedEntrants = computed(() => entrants.filter(entrant => !entrant.won).sort((a, b) => {
-        return b.distance - a.distance;
-    }).slice(0, 20 /* TODO magic number */));
-    const winners = computed(() => entrants.filter(entrant => entrant.won));
+    const viewportRange = reactive({
+        start: 0,
+        end: 0,
+    })
+    const rankedEntrants = computed(() => {
+        const DISPLAY_ENTRANTS_COUNT = 35; // TODO configurable
+        const MAIN_ENTRANTS_COUNT = 21;
+        const MAX_COLUMNS = 7; // TODO configurable
+
+        const newEntrants = entrants.filter(entrant => !entrant.won).sort((a, b) => {
+            return b.distance - a.distance;
+        }).slice(0, DISPLAY_ENTRANTS_COUNT);
+
+        const sortedDistances = newEntrants.map(entrant => entrant.distance).sort((a, b) => b - a);
+
+        viewportRange.end = Math.max(sortedDistances[0], viewportRange.end); // to prevent sudden distance change caused by a winner
+        viewportRange.start = Math.min(sortedDistances[MAIN_ENTRANTS_COUNT - 1]);
+
+        const columnLastDistances = new Array(MAX_COLUMNS).fill(Infinity);
+        return newEntrants.map(entrant => {
+            const x = (entrant.distance - viewportRange.start) / (viewportRange.end - viewportRange.start);
+            let row = 0;
+            let rowBestDiff = 0;
+            for (let i = 0; i < MAX_COLUMNS; i++) {
+                if (columnLastDistances[i] === Infinity) {
+                    row = i;
+                    break;
+                }
+                const diff = columnLastDistances[i] - entrant.distance;
+                if (diff > rowBestDiff) {
+                    row = i;
+                    rowBestDiff = diff;
+                }
+            }
+            columnLastDistances[row] = entrant.distance;
+            console.log(columnLastDistances, row, entrant.distance)
+            return {
+                ...entrant,
+                x,
+                y: row / MAX_COLUMNS,
+            };
+        });
+    });
+    const winners = computed(() => entrants.filter(entrant => entrant.won).sort((a, b) => a.distance - b.distance)); // The entrant who wins first goes nearest
     const nextWinSec = ref<number>(0);
     const handle = ref<ReturnType<typeof setInterval> | undefined>();
 
@@ -68,12 +108,14 @@ export const useEntrantsStore = defineStore("entrants", () => {
         }
         const winners = new Set<Entrant>();
         entrants.forEach(entrant => entrant.reset());
+        viewportRange.start = 0;
+        viewportRange.end = 0;
 
         nextWinSec.value = settings.settings.drawFirstSec;
         handle.value = setInterval(() => {
             nextWinSec.value -= 1 / settings.settings.changePerSec;
             console.time("update & move");
-            for (const entrant of entrants) {
+            for (const entrant of entrants.filter(entrant => !entrant.won)) {
                 entrant.updateForce(Math.random() - 0.5, settings.settings.kForceFade);
                 entrant.move(settings.settings.kResistance, settings.settings.drawIntervalSec);
             }
@@ -103,6 +145,7 @@ export const useEntrantsStore = defineStore("entrants", () => {
         maxDistance,
         winners,
         nextWinSec,
+        viewportRange,
         handle,
         start_draw,
     }
