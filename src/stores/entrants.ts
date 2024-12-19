@@ -8,6 +8,8 @@ export class Entrant {
     public velocity: number;
     public force: number;
     public won: boolean;
+    public x: number;
+    public y: number;
 
     constructor(name: string) {
         this.name = name;
@@ -15,6 +17,8 @@ export class Entrant {
         this.velocity = 0;
         this.force = 0;
         this.won = false;
+        this.x = 0.5;
+        this.y = 0;
     }
 
     public reset() {
@@ -22,6 +26,8 @@ export class Entrant {
         this.velocity = 2;
         this.force = 0;
         this.won = false;
+        this.x = 0.5;
+        this.y = 0;
     }
 
     public updateForce(deltaForce: number, kForceFade: number) {
@@ -54,25 +60,23 @@ export const useEntrantsStore = defineStore("entrants", () => {
         end: 0,
     })
     const rankedEntrants = computed(() => {
-        const DISPLAY_ENTRANTS_COUNT = 35; // TODO configurable
-        const MAIN_ENTRANTS_COUNT = 21;
-        const MAX_COLUMNS = 7; // TODO configurable
+        const settingsStore = useSettingsStore();
 
         const newEntrants = entrants.filter(entrant => !entrant.won).sort((a, b) => {
             return b.distance - a.distance;
-        }).slice(0, DISPLAY_ENTRANTS_COUNT);
+        }).slice(0, settingsStore.settingsUI.entrantsRendered);
 
         const sortedDistances = newEntrants.map(entrant => entrant.distance).sort((a, b) => b - a);
 
         viewportRange.end = Math.max(sortedDistances[0], viewportRange.end); // to prevent sudden distance change caused by a winner
-        viewportRange.start = Math.min(sortedDistances[MAIN_ENTRANTS_COUNT - 1]);
+        viewportRange.start = sortedDistances[Math.min(settingsStore.settingsUI.entrantsRendered, sortedDistances.length) - 1];
 
-        const columnLastDistances = new Array(MAX_COLUMNS).fill(Infinity);
+        const columnLastDistances = new Array(settingsStore.settingsUI.columns).fill(Infinity);
         return newEntrants.map(entrant => {
             const x = (entrant.distance - viewportRange.start) / (viewportRange.end - viewportRange.start);
             let row = 0;
             let rowBestDiff = 0;
-            for (let i = 0; i < MAX_COLUMNS; i++) {
+            for (let i = 0; i < settingsStore.settingsUI.columns; i++) {
                 if (columnLastDistances[i] === Infinity) {
                     row = i;
                     break;
@@ -84,12 +88,9 @@ export const useEntrantsStore = defineStore("entrants", () => {
                 }
             }
             columnLastDistances[row] = entrant.distance;
-            console.log(columnLastDistances, row, entrant.distance)
-            return {
-                ...entrant,
-                x,
-                y: row / MAX_COLUMNS,
-            };
+            entrant.x = x;
+            entrant.y = row / settingsStore.settingsUI.columns;
+            return entrant;
         });
     });
     const winners = computed(() => entrants.filter(entrant => entrant.won).sort((a, b) => a.distance - b.distance)); // The entrant who wins first goes nearest
@@ -120,8 +121,8 @@ export const useEntrantsStore = defineStore("entrants", () => {
                 entrant.move(settings.settings.kResistance, settings.settings.drawIntervalSec);
             }
             console.timeEnd("update & move");
-            console.time("check winner");
             if (nextWinSec.value <= 0) {
+                // TODO 冷却期 等待UI刷新
                 nextWinSec.value += settings.settings.drawIntervalSec;
                 const winner = entrants.find(entrant => entrant.distance === maxDistance.value);
                 if (!winner) {
@@ -130,12 +131,12 @@ export const useEntrantsStore = defineStore("entrants", () => {
                 }
                 winner.win();
                 winners.add(winner);
+                // TODO 去重
             }
             if (times && winners.size >= times) {
                 clearInterval(handle.value);
                 handle.value = undefined;
             }
-            console.timeEnd("check winner");
         }, 1000 / settings.settings.changePerSec);
     }
 
