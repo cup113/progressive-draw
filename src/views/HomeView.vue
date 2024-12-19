@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import { useEntrantsStore } from '@/stores/entrants';
+import { useSettingsStore } from '@/stores/settings';
 import { useLocalStorage } from '@vueuse/core';
 
 import EntrantStar from '@/components/EntrantComet.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Progress } from '@/components/ui/progress';
 import { computed } from 'vue';
 
 const entrants = useEntrantsStore();
+const settings = useSettingsStore();
 
 const times = useLocalStorage('PD_times', 5);
 const prizeName = useLocalStorage('PD_prizeName', '抽奖');
@@ -39,20 +42,20 @@ function start_draw() {
       <TransitionGroup tag="ol" class="flex flex-wrap justify-center gap-2" name="fade">
         <li v-for="entrant, i in entrants.winners" :key="entrant.name"
           class="relative flex items-center gap-1 bg-lime-300 rounded-xl px-4 py-2">
-          <div class="absolute w-8 h-6 text-xs -left-2 -top-2 rounded-full bg-slate-200 p-1">#{{ i + 1 }}</div>
+          <div class="absolute w-8 h-6 text-xs -left-2 -top-2 rounded-full bg-slate-200 p-1 text-center">#{{ i + 1 }}</div>
           <div>{{ entrant.name }}</div>
         </li>
       </TransitionGroup>
     </section>
     <section class="flex flex-col gap-4">
       <div class="text-center mb-4 flex items-center justify-center gap-4 text-sm text-slate-700">
-        <!--TODO 进度条动画-->
         <div>
-          <span v-if="entrants.handle">{{ entrants.nextWinSec.toFixed(1) }}</span>
-          <span v-else>--</span>
-          <span>&nbsp;s</span>
+          <Progress :model-value="entrants.nextWinSec / settings.settings.changePerSec * 100" :max="100" class="w-40"></Progress>
         </div>
-        <div>{{ entrants.winners.length }} / {{ times }}</div>
+        <div>
+          <Progress :model-value="entrants.winners.length / times * 100" :max="100" class="w-40"></Progress>
+        </div>
+        <div>{{ entrants.viewportRange.start.toFixed(1) }} - {{ entrants.viewportRange.end.toFixed(1) }}</div>
       </div>
       <div class="sky-box relative w-[48rem] h-[50vh] mx-auto overflow-hidden border-8 border-slate-100 rounded-2xl" :style="cameraStyle">
         <TransitionGroup tag="div" class="" name="fade">
