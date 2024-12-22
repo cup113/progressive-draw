@@ -57,13 +57,13 @@ const settingItemsUI: SettingItem<'settingsUI'>[] = [
                     </div>
                     <div v-for="item in settingItems" :key="item.key" class="flex items-center gap-4">
                         <div class="w-56 text-right">{{ item.label }}</div>
-                        <Input v-model="settings.settings[item.key]" :type="item.type" :placeholder="item.label"
+                        <Input v-model="settings.settings[item.key]" :type="item.type" :max="item.max" :min="item.min" :step="item.step" :placeholder="item.label"
                             class="text-lg" />
                     </div>
                     <hr>
                     <div v-for="item in settingItemsUI" :key="item.key" class="flex items-center gap-4">
                         <div class="w-56 text-right">{{ item.label }}</div>
-                        <Input v-model="settings.settingsUI[item.key]" :type="item.type" :placeholder="item.label"
+                        <Input v-model="settings.settingsUI[item.key]" :type="item.type" :max="item.max" :min="item.min" :step="item.step" :placeholder="item.label"
                             class="text-lg" />
                     </div>
                 </form>

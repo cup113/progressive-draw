@@ -7,7 +7,7 @@ export const useSettingsStore = defineStore('settings', () => {
     drawFirstSec: 5,
     drawIntervalSec: 2,
     kResistance: 0.05,
-    kForceFade: 0.9,
+    kForceFade: 0.7,
     changePerSec: 2,
   });
 
