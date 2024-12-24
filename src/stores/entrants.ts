@@ -4,220 +4,232 @@ import { useSettingsStore } from "./settings";
 
 export class Entrant {
     public name: string;
-    public distance: number;
-    public velocity: number;
-    public force: number;
-    public won: boolean;
-    public freeAxis: number;
+    public level: number;
+    public activation: number;
+    public wonNo: number;
+    public horizontalPosition: number;
 
     constructor(name: string) {
         this.name = name;
-        this.distance = 0;
-        this.velocity = 0;
-        this.force = 0;
-        this.won = false;
-        this.freeAxis = 0.5;
+        this.level = 1;
+        this.activation = 0;
+        this.wonNo = 0;
+        this.horizontalPosition = 0;
+    }
+
+    public getWon() {
+        return this.wonNo > 0;
     }
 
     public reset() {
-        this.distance = 0;
-        this.velocity = 2;
-        this.force = 0;
-        this.won = false;
-        this.freeAxis = 0.5;
+        this.level = 1;
+        this.activation = 0;
+        this.wonNo = 0;
     }
 
-    public updateForce(deltaForce: number, kForceFade: number) {
-        this.force *= kForceFade;
-        this.force += deltaForce;
-        if (this.force < 0) {
-            this.force = 0;
-        }
-    }
-
-    public move(kResistance: number, time: number) {
-        this.velocity += (this.force - kResistance * this.velocity * this.velocity) * time;
-        if (this.velocity < 0) {
-            this.velocity = 0;
-        }
-        this.distance += this.velocity * time;
-    }
-
-    public moveFreeAxis(deltaFreeAxis: number) {
-        this.freeAxis += deltaFreeAxis;
-    }
-
-    public win() {
-        this.won = true;
+    public win(no: number) {
+        this.wonNo = no;
     }
 }
 
+type Camera = { bottom: number, levels: number };
 
-interface SceneDependencies {
-    updateDistance(entrant: Entrant, deltaTime: number, deltaForce: number): void;
-    getInterval(total: number, remaining: number): number;
-    getTargetCamera(distances: number[]): { center: number, radius: number };
+type DrawState = {
+    totalLevels: number;
+    levels: Map<number, Level>;
+    activationRate: number;
+    activationThreshold: number;
+    totalCount: number;
+    remainingCount: number;
+    winners: Set<Entrant>;
 }
 
-class Camera {
-    public center: number;
-    public radius: number;
+function sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
 
-    public centerVelocity: number;
-    public radiusVelocity: number;
+class Level {
+    public leftMost: number;
+    public rightMost: number;
+    public entrants: Set<Entrant>;
 
-    constructor() {
-        this.center = 5;
-        this.radius = 6;
-        this.centerVelocity = 1;
-        this.radiusVelocity = 0;
+    constructor(entrants: Set<Entrant>) {
+        this.entrants = entrants;
+        const size = entrants.size;
+        if (size % 2 === 0) {
+            this.leftMost = -size / 2;
+            this.rightMost = size / 2 - 1;
+        } else {
+            this.leftMost = (size - 1) / 2;
+            this.rightMost = (size + 1) / 2;
+        }
     }
 
-    public reset() {
-        this.center = 5;
-        this.radius = 6;
-        this.centerVelocity = 1;
-        this.radiusVelocity = 0;
+    public removeEntrant(entrant: Entrant) {
+        this.entrants.delete(entrant);
+        const moveToRight = entrant.horizontalPosition > (this.leftMost + this.rightMost) / 2;
+        if (moveToRight) {
+            this.leftMost += 1;
+        } else {
+            this.rightMost -= 1;
+        }
+        this.entrants.forEach(other => {
+            if (moveToRight) {
+                if (other.horizontalPosition < entrant.horizontalPosition) {
+                    other.horizontalPosition += 1;
+                }
+            } else {
+                if (other.horizontalPosition > entrant.horizontalPosition) {
+                    other.horizontalPosition -= 1;
+                }
+            }
+        });
     }
 
-    public update(deltaTime: number, targetCenter: number, targetRadius: number) {
-        const K_NORMAL_APPROACH = 0.15;
-        const EXPECTED_INTERVAL = 0.03;
-
-        const expectedCenterVelocity = (targetCenter - this.center) / deltaTime;
-        const expectedRadiusVelocity = (targetRadius - this.radius) / deltaTime;
-
-        const approachRate = 1 - (Math.pow((1 - K_NORMAL_APPROACH), deltaTime / EXPECTED_INTERVAL))
-
-        this.centerVelocity += (expectedCenterVelocity - this.centerVelocity) * approachRate;
-        this.radiusVelocity += (expectedRadiusVelocity - this.radiusVelocity) * approachRate;
-
-        this.center += this.centerVelocity * deltaTime;
-        this.radius += this.radiusVelocity * deltaTime;
+    public addEntrant(entrant: Entrant) {
+        this.entrants.add(entrant);
+        const placeRight = (-this.leftMost) > this.rightMost;
+        if (placeRight) {
+            this.rightMost += 1;
+            entrant.horizontalPosition = this.rightMost;
+        } else {
+            this.leftMost -= 1;
+            entrant.horizontalPosition = this.leftMost;
+        }
     }
 }
 
 class Scene {
     public active: boolean;
     public camera: Camera;
-    public total: number;
-    public totalSec: number;
-    public remainingCount: number;
-    public remainingSec: number;
-    public lastSec: number;
+    public drawState: DrawState;
     public entrants: Entrant[];
-    public winners: Set<Entrant>;
-    public dependencies: SceneDependencies;
 
-    constructor(entrants: Entrant[], dependencies: SceneDependencies) {
+    constructor(entrants: Entrant[]) {
         this.active = false;
-        this.camera = new Camera();
-        this.total = 1;
-        this.totalSec = 1;
-        this.remainingCount = 0;
-        this.remainingSec = 0;
-        this.lastSec = 0;
+        this.camera = {
+            bottom: 1,
+            levels: 7, // TODO configurable
+        }
+        this.drawState = {
+            totalLevels: 25, // TODO configurable
+            activationRate: 0.3, // TODO configurable
+            activationThreshold: 1,
+            totalCount: 0,
+            remainingCount: 0,
+            winners: new Set<Entrant>(),
+            levels: new Map<number, Level>(),
+        };
         this.entrants = entrants;
-        this.winners = new Set();
-        this.dependencies = dependencies;
     }
 
-    public start_animate(total: number) {
+    public reset(total: number) {
         this.active = true;
-        this.total = total;
-        this.camera.center = 0.5;
-        this.camera.radius = 1;
-        this.remainingCount = total;
-        this.winners.clear();
-        this.lastSec = performance.now();
-        this.totalSec = this.dependencies.getInterval(total, total);
-        this.remainingSec = this.totalSec;
+        this.camera.bottom = 1;
+        this.drawState.activationThreshold = 1;
+        this.drawState.totalCount = total;
+        this.drawState.remainingCount = total;
+        this.drawState.winners.clear();
+        this.drawState.levels.clear();
+        this.drawState.levels.set(1, new Level(new Set(this.entrants)));
 
         this.entrants.forEach(entrant => entrant.reset());
-        this.entrants.forEach(entrant => entrant.freeAxis = Math.random() * 0.6 + 0.2);
-        requestAnimationFrame(this.animate_core.bind(this));
     }
 
-    public animate_core() {
-        const deltaTime = (performance.now() - this.lastSec) / 1000;
-        this.remainingSec -= deltaTime;
-        this.lastSec = performance.now();
-        const maxForceIncrement = deltaTime * 0.5;
+    public async start_animate(total: number) {
+        this.reset(total);
 
-        for (const entrant of this.entrants) {
-            if (entrant.won) {
-                continue;
-            }
-            const force = Math.random() * maxForceIncrement;
-            this.dependencies.updateDistance(entrant, deltaTime, force);
+        while (this.active) {
+            this.step_activate();
+            await sleep(500); // TODO configurable
+            this.step_motion();
+            await sleep(500);
+            this.step_home();
+            await sleep(300);
         }
+    }
 
-        const distances = this.entrants.filter(entrant => !entrant.won).map(entrant => entrant.distance);
-        const targetCamera = this.dependencies.getTargetCamera(distances);
+    public step_activate() {
+        this.drawState.activationThreshold = 1 - this.drawState.activationRate;
 
-        this.camera.update(deltaTime, targetCamera.center, targetCamera.radius);
+        this.entrants.forEach(entrant => {
+            entrant.activation += Math.random();
+        });
+    }
 
-        if (this.remainingSec <= 0) {
-            const maxDistance = Math.max(...distances);
-            const winner = this.entrants.find(entrant => entrant.distance === maxDistance);
-            if (winner) {
-                winner.win();
-                this.winners.add(winner);
+    public step_motion() {
+        const activatedEntrant = new Set<Entrant>();
+
+        this.entrants.forEach(entrant => {
+            if (entrant.activation >= this.drawState.activationThreshold) {
+                activatedEntrant.add(entrant);
             }
-            this.remainingCount--;
-            if (this.remainingCount <= 0) {
-                this.active = false;
+        });
+
+        activatedEntrant.forEach(entrant => {
+            if (entrant.getWon()) {
                 return;
-            } else {
-                this.totalSec = this.dependencies.getInterval(this.total, this.remainingCount);
-                this.remainingSec += this.totalSec;
             }
-        }
+            const currentLevel = this.drawState.levels.get(entrant.level);
+            if (!currentLevel) {
+                throw TypeError(`Level ${entrant.level} not found`);
+            }
+            currentLevel.removeEntrant(entrant);
 
-        requestAnimationFrame(this.animate_core.bind(this));
-        // TODO 等待UI刷新
+            entrant.level += 1;
+            if (entrant.level > this.drawState.totalLevels) {
+                entrant.win(this.drawState.winners.size + 1);
+                this.drawState.winners.add(entrant);
+                this.drawState.remainingCount -= 1;
+                if (this.drawState.remainingCount === 0) {
+                    this.active = false;
+                }
+                return;
+            }
+
+            if (!this.drawState.levels.has(entrant.level)) {
+                this.drawState.levels.set(entrant.level, new Level(new Set()));
+            }
+            const newLevel = this.drawState.levels.get(entrant.level);
+            if (!newLevel) {
+                throw TypeError(`Level ${entrant.level} not found`);
+            }
+
+            newLevel.addEntrant(entrant);
+        });
+    }
+
+    public step_home() {
+        const maxLevel = Math.max.apply(null, this.entrants.map(entrant => entrant.level));
+        if (this.camera.bottom + this.camera.levels - 2 <= maxLevel) {
+            this.camera.bottom += 1;
+        }
+        this.entrants.forEach(entrant => {
+            if (entrant.activation >= this.drawState.activationThreshold) {
+                entrant.activation -= this.drawState.activationThreshold;
+                entrant.activation /= 3;
+            } else {
+                entrant.activation /= 10; // TODO configurable
+            }
+        });
     }
 }
 
 export const useEntrantsStore = defineStore("entrants", () => {
     const settings = useSettingsStore();
     const entrants: Entrant[] = reactive([]);
-    const displayedEntrants = computed(() => entrants
-        .filter(entrant => !entrant.won)
-        .sort((a, b) => b.distance - a.distance)
-        .slice(0, Math.min(settings.settingsUI.entrantsRendered, entrants.length)));
 
-    const scene = reactive(new Scene(entrants, {
-        updateDistance(entrant, deltaTime, deltaForce) {
-            entrant.updateForce(deltaForce, Math.pow(settings.settings.kForceFade, deltaTime));
-            entrant.move(settings.settings.kResistance, settings.settings.drawIntervalSec);
-        },
-        getInterval(total, remaining) {
-            if (total === remaining) {
-                return settings.settings.drawFirstSec;
-            } else {
-                return settings.settings.drawIntervalSec;
-            }
-        },
-        getTargetCamera(distances) {
-            const descentDistances = distances.slice().sort((a, b) => b - a);
-            const maxDistance = descentDistances[0];
-            const minDistance = descentDistances[Math.min(
-                settings.settingsUI.entrantsDisplayed,
-                descentDistances.length
-            ) - 1];
-            const distanceGap = maxDistance - minDistance;
-            const upperBound = maxDistance + distanceGap * 0.1;
-            const lowerBound = minDistance - distanceGap * 0.1;
+    const scene = reactive(new Scene(entrants));
 
-            return {
-                center: (upperBound + lowerBound) / 2,
-                radius: (upperBound - lowerBound) / 2,
-            }
+    const winners = computed(() => entrants.filter(entrant => entrant.getWon()).sort((a, b) => a.wonNo - b.wonNo));
+
+    const levels = computed(() => {
+        const _levels = new Array<number>();
+        for (let i = scene.camera.bottom; i <= scene.camera.bottom + scene.camera.levels - 1; i++) {
+            _levels.push(i);
         }
-    }));
-
-    const winners = computed(() => entrants.filter(entrant => entrant.won).sort((a, b) => a.distance - b.distance)); // FIXME Sort according to time
+        return _levels.reverse();
+    })
 
     watch(() => settings.settings.nameList, nameList => {
         const newEntrants = nameList.map(name => new Entrant(name));
@@ -226,8 +238,8 @@ export const useEntrantsStore = defineStore("entrants", () => {
 
     return {
         entrants,
-        displayedEntrants,
         scene,
         winners,
+        levels,
     }
 });

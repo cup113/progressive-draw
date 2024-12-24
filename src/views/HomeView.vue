@@ -2,10 +2,10 @@
 import { useEntrantsStore } from '@/stores/entrants';
 import { useLocalStorage, useFullscreen } from '@vueuse/core';
 
-import EntrantStar from '@/components/EntrantComet.vue';
+import EntrantDisplay from '@/components/EntrantDisplay.vue';
+import LevelDisplay from '@/components/LevelDisplay.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Progress } from '@/components/ui/progress';
 import { ref } from 'vue';
 
 const entrants = useEntrantsStore();
@@ -19,7 +19,7 @@ const { isFullscreen, enter, exit } = useFullscreen(main);
 </script>
 
 <template>
-  <main class="flex flex-col gap-4 items-center">
+  <main class="flex flex-col gap-4 items-center bg-white" ref="main">
     <form @submit.prevent class="flex gap-2 justify-center items-center" v-show="!entrants.scene.active">
       <div>奖项：</div>
       <Input v-model="prizeName" type="text" placeholder="请输入奖项名称" class="w-40"></Input>
@@ -41,27 +41,19 @@ const { isFullscreen, enter, exit } = useFullscreen(main);
       </TransitionGroup>
     </section>
     <section class="flex flex-col gap-4">
-      <div class="text-center mb-4 flex items-center justify-center gap-4 text-sm text-slate-700">
-        <div>
-          <Progress :model-value="entrants.scene.remainingSec / entrants.scene.totalSec * 100" :max="100"
-            class="w-40"></Progress>
-        </div>
-        <div>
-          <Progress :model-value="entrants.winners.length / total * 100" :max="100" class="w-40"></Progress>
-        </div>
-        <div>{{ entrants.scene.camera.center.toFixed(1) }} &pm; {{ entrants.scene.camera.radius.toFixed(1) }}</div>
-      </div>
       <div class="relative min-w-[80vw] min-h-[50vh] mx-auto overflow-hidden bg-slate-50" ref="main">
-        <TransitionGroup tag="div" name="fade">
-          <EntrantStar v-for="entrant, i in entrants.displayedEntrants" :key="entrant.name" :entrant="entrant" :index="i">
-          </EntrantStar>
-          <div>
-            <Button v-if="isFullscreen" @click="exit" class="absolute top-2 right-2">退出全屏</Button>
-            <Button v-else @click="enter" class="absolute top-2 right-2">全屏</Button>
-          </div>
+        <TransitionGroup tag="div" class="flex flex-col justify-center" name="fade">
+          <LevelDisplay v-for="level in entrants.levels" :key="level" :level-no="level"></LevelDisplay>
         </TransitionGroup>
+        <div>
+          <EntrantDisplay v-for="entrant in entrants.entrants" :key="entrant.name" :entrant="entrant"></EntrantDisplay>
+        </div>
       </div>
     </section>
+    <div>
+      <Button v-if="isFullscreen" @click="exit" class="absolute top-2 right-2">退出全屏</Button>
+      <Button v-else @click="enter" class="absolute top-2 right-2">全屏</Button>
+    </div>
   </main>
 </template>
 
@@ -79,5 +71,9 @@ const { isFullscreen, enter, exit } = useFullscreen(main);
 .fade-enter-from,
 .fade-leave {
   opacity: 1;
+}
+
+.fade-move {
+  transition: transform 0.5s ease;
 }
 </style>
