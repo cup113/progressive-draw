@@ -29,6 +29,8 @@ export class Entrant {
 
     public win(no: number) {
         this.wonNo = no;
+        this.horizontalPosition = 0; // TODO list a line
+        this.activation = 0;
     }
 }
 
@@ -152,9 +154,27 @@ class Scene {
     public step_activate() {
         this.drawState.activationThreshold = 1 - this.drawState.activationRate;
 
-        this.entrants.forEach(entrant => {
+        this.entrants.filter(entrant => !entrant.getWon()).forEach(entrant => {
             entrant.activation += Math.random();
         });
+
+        // Check to avoid excessive winners
+        this.drawState.levels.forEach((level, levelNo) => {
+            if (levelNo === this.drawState.totalLevels - 1) {
+                const activatedWinners = new Array<Entrant>();
+                level.entrants.forEach(entrant => {
+                    if (entrant.activation >= this.drawState.activationThreshold) {
+                        activatedWinners.push(entrant);
+                    }
+                });
+                if (this.drawState.remainingCount < activatedWinners.length) {
+                    activatedWinners.sort((a, b) => b.activation - a.activation);
+                    activatedWinners.slice(this.drawState.remainingCount).forEach(entrant => {
+                        entrant.activation = this.drawState.activationThreshold * 0.9;
+                    });
+                }
+            }
+        })
     }
 
     public step_motion() {
@@ -177,7 +197,7 @@ class Scene {
             currentLevel.removeEntrant(entrant);
 
             entrant.level += 1;
-            if (entrant.level > this.drawState.totalLevels) {
+            if (entrant.level >= this.drawState.totalLevels) {
                 entrant.win(this.drawState.winners.size + 1);
                 this.drawState.winners.add(entrant);
                 this.drawState.remainingCount -= 1;
@@ -225,7 +245,7 @@ export const useEntrantsStore = defineStore("entrants", () => {
 
     const levels = computed(() => {
         const _levels = new Array<number>();
-        for (let i = scene.camera.bottom; i <= scene.camera.bottom + scene.camera.levels - 1; i++) {
+        for (let i = scene.camera.bottom; i < scene.drawState.totalLevels && _levels.length < scene.camera.levels; i++) {
             _levels.push(i);
         }
         return _levels.reverse();
