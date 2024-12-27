@@ -1,31 +1,98 @@
 import { useLocalStorage } from '@vueuse/core';
 import { defineStore } from 'pinia';
+import { computed } from 'vue';
+import { nanoid } from 'nanoid';
 
 export interface AwardPreset {
+  id: string;
   awardName: string;
   totalCount: number;
   totalLevels: number;
+  displayLevels: number;
   activationRate: number;
+  animateIntervalMs: number;
+  attenuation: number;
+}
+
+export type AwardPresetDescriptor = {
+  [K in keyof AwardPreset]: {
+    disabled?: boolean;
+    label: string;
+    description: string;
+  } & (AwardPreset[K] extends number ? {
+    type: 'number';
+    min: number;
+    max: number;
+    step: number;
+  } : {
+    type: 'text';
+    min?: never;
+    max?: never;
+    step?: never;
+  });
+}
+
+const AWARD_DESCRIPTOR: AwardPresetDescriptor = {
+  id: { disabled: true, label: 'ID', description: '唯一识别标识', type: 'text' },
+  awardName: { label: '奖项名称', description: '显示在大屏顶部的内容', type: 'text' },
+  totalCount: { label: '抽奖人数', description: '奖品数量', type: 'number', min: 1, max: 100, step: 1 },
+  totalLevels: { label: '抽奖层数', description: '级数越多，时间越长', type: 'number', min: 1, max: 100, step: 1 },
+  displayLevels: { label: '显示层数', description: '显示在大屏上的层数', type: 'number', min: 1, max: 100, step: 1 },
+  activationRate: { label: '激活率', description: '每次上升的大致概率', type: 'number', min: 0, max: 1, step: 0.01 },
+  animateIntervalMs: { label: '动画间隔', description: '动画间隔时间', type: 'number', min: 100, max: 1000, step: 10 },
+  attenuation: { label: '衰减系数', description: '衰减系数越大，惯性越强', type: 'number', min: 0, max: 1, step: 0.01 },
+}
+
+function get_default_award_preset(): AwardPreset {
+  return {
+    id: nanoid(),
+    awardName: '抽奖',
+    totalCount: 5,
+    totalLevels: 25,
+    displayLevels: 7,
+    activationRate: 0.2,
+    animateIntervalMs: 500,
+    attenuation: 0.3,
+  };
 }
 
 export const useSettingsStore = defineStore('settings', () => {
-  const settings = useLocalStorage('PD_settings', {
-    nameList: new Array<string>(),
-    drawFirstSec: 5,
-    drawIntervalSec: 2,
-    kResistance: 0.05,
-    kForceFade: 0.7,
-    changePerSec: 2,
+  const nameList = useLocalStorage('PD_nameList', new Array<string>());
+  const presets = useLocalStorage('PD_presets', [get_default_award_preset()]);
+  const activePresetId = useLocalStorage('PD_activePresetId', presets.value[0].id);
+  const currentPreset = computed(() => {
+    return presets.value.find(preset => preset.id === activePresetId.value) ?? get_default_award_preset();
   });
 
-  const settingsUI = useLocalStorage('PD_settings_ui', {
-    entrantsRendered: 35,
-    entrantsDisplayed: 25,
-    columns: 8,
-  });
+  function add_preset() {
+    presets.value.push(get_default_award_preset());
+  }
+
+  function delete_preset(id: string) {
+    const index = presets.value.findIndex(preset => preset.id === id);
+    if (index >= 0) {
+      presets.value.splice(index, 1);
+    }
+  }
+
+  function update_preset(id: string, preset: Partial<AwardPreset>) {
+    const index = presets.value.findIndex(p => p.id === id);
+    if (index >= 0) {
+      presets.value[index] = {
+        ...presets.value[index],
+        ...preset,
+      }
+    }
+  }
 
   return {
-    settings,
-    settingsUI,
+    AWARD_DESCRIPTOR,
+    nameList,
+    presets,
+    activePresetId,
+    currentPreset,
+    add_preset,
+    delete_preset,
+    update_preset,
   }
 });

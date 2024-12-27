@@ -1,6 +1,8 @@
 import { defineStore } from "pinia";
 import { computed, reactive, watch } from "vue";
 import { useSettingsStore } from "./settings";
+import type { AwardPreset } from "./settings";
+import type { HistoryDraw } from "./history";
 
 export class Entrant {
     public name: string;
@@ -43,6 +45,8 @@ type DrawState = {
     activationThreshold: number;
     totalCount: number;
     remainingCount: number;
+    attenuation: number;
+    startTimestamp: number;
     winners: Set<Entrant>;
 }
 
@@ -111,26 +115,32 @@ class Scene {
         this.active = false;
         this.camera = {
             bottom: 1,
-            levels: 7, // TODO configurable
+            levels: 7,
         }
         this.drawState = {
-            totalLevels: 25, // TODO configurable
-            activationRate: 0.3, // TODO configurable
+            totalLevels: 25,
+            activationRate: 0.3,
             activationThreshold: 1,
             totalCount: 0,
             remainingCount: 0,
+            attenuation: 0.3,
+            startTimestamp: Date.now(),
             winners: new Set<Entrant>(),
             levels: new Map<number, Level>(),
         };
         this.entrants = entrants;
     }
 
-    public reset(total: number) {
+    public reset(preset: AwardPreset) {
         this.active = true;
         this.camera.bottom = 1;
+        this.camera.levels = preset.displayLevels;
+        this.drawState.activationRate = preset.activationRate;
         this.drawState.activationThreshold = 1;
-        this.drawState.totalCount = total;
-        this.drawState.remainingCount = total;
+        this.drawState.totalCount = preset.totalCount;
+        this.drawState.remainingCount = preset.totalCount;
+        this.drawState.attenuation = preset.attenuation;
+        this.drawState.startTimestamp = Date.now();
         this.drawState.winners.clear();
         this.drawState.levels.clear();
         this.drawState.levels.set(1, new Level(new Set(this.entrants)));
@@ -138,8 +148,8 @@ class Scene {
         this.entrants.forEach(entrant => entrant.reset());
     }
 
-    public async start_animate(total: number) {
-        this.reset(total);
+    public async start_animate(preset: AwardPreset, onFinish: (draw: HistoryDraw) => void) {
+        this.reset(preset);
 
         while (this.active) {
             this.step_activate();
@@ -149,6 +159,13 @@ class Scene {
             this.step_home();
             await sleep(300);
         }
+
+        const historyDraw: HistoryDraw = {
+            awardName: preset.awardName,
+            durationSec: (Date.now() - this.drawState.startTimestamp) / 1000,
+            winners: Array.from(this.drawState.winners).map(entrant => entrant.name),
+        };
+        onFinish(historyDraw);
     }
 
     public step_activate() {
@@ -227,9 +244,8 @@ class Scene {
         this.entrants.forEach(entrant => {
             if (entrant.activation >= this.drawState.activationThreshold) {
                 entrant.activation -= this.drawState.activationThreshold;
-                entrant.activation /= 3;
             } else {
-                entrant.activation /= 10; // TODO configurable
+                entrant.activation *= this.drawState.attenuation;
             }
         });
     }
@@ -251,7 +267,7 @@ export const useEntrantsStore = defineStore("entrants", () => {
         return _levels.reverse();
     })
 
-    watch(() => settings.settings.nameList, nameList => {
+    watch(() => settings.nameList, nameList => {
         const newEntrants = nameList.map(name => new Entrant(name));
         entrants.splice(0, entrants.length, ...newEntrants);
     }, { immediate: true, deep: true });
