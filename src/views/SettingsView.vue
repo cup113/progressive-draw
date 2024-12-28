@@ -2,6 +2,7 @@
 import { useSettingsStore } from '@/stores/settings';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { computed } from 'vue';
@@ -53,6 +54,14 @@ const settings = useSettingsStore();
                                 </div>
                             </TabsContent>
                         </Tabs>
+                    </div>
+                    <div class="flex flex-col items-center gap-4">
+                        <h4 class="text-center font-bold text-lg">预设管理</h4>
+                        <Button @click="settings.export_settings()">导出预设</Button>
+                        <div class="flex gap-2 items-center">
+                            <div>导入预设</div>
+                            <Input type="file" accept=".json" @change="settings.import_settings($event.target.files[0])" class="w-56" />
+                        </div>
                     </div>
                 </form>
             </CardContent>

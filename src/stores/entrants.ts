@@ -6,15 +6,20 @@ import type { HistoryDraw } from "./history";
 
 export class Entrant {
     public name: string;
+    public detail?: string;
     public level: number;
     public activation: number;
+    public activated: boolean;
     public wonNo: number;
     public horizontalPosition: number;
 
-    constructor(name: string) {
+    constructor(fullName: string) {
+        const [name, detail] = fullName.split(":", 2);
         this.name = name;
+        this.detail = detail;
         this.level = 1;
         this.activation = 0;
+        this.activated = false;
         this.wonNo = 0;
         this.horizontalPosition = 0;
     }
@@ -23,9 +28,18 @@ export class Entrant {
         return this.wonNo > 0;
     }
 
+    public getFullName() {
+        if (this.detail) {
+            return `${this.detail} ${this.name}`
+        } else {
+            return this.name;
+        }
+    }
+
     public reset() {
         this.level = 1;
         this.activation = 0;
+        this.activated = false;
         this.wonNo = 0;
     }
 
@@ -130,6 +144,8 @@ class Scene {
     }
 
     public reset(preset: AwardPreset) {
+        // TODO remove won entrant
+
         this.active = true;
         this.camera.bottom = 1;
         this.camera.levels = preset.displayLevels;
@@ -157,13 +173,13 @@ class Scene {
             this.step_motion();
             await sleep(500);
             this.step_home();
-            await sleep(300);
+            await sleep(500);
         }
 
         const historyDraw: HistoryDraw = {
             awardName: preset.awardName,
             durationSec: (Date.now() - this.drawState.startTimestamp) / 1000,
-            winners: Array.from(this.drawState.winners).map(entrant => entrant.name),
+            winners: Array.from(this.drawState.winners).map(entrant => entrant.getFullName()),
         };
         onFinish(historyDraw);
     }
@@ -173,33 +189,60 @@ class Scene {
 
         this.entrants.filter(entrant => !entrant.getWon()).forEach(entrant => {
             entrant.activation += Math.random();
+            if (entrant.activation >= this.drawState.activationThreshold) {
+                entrant.activated = true;
+            }
         });
 
-        // Check to avoid excessive winners
-        this.drawState.levels.forEach((level, levelNo) => {
-            if (levelNo === this.drawState.totalLevels - 1) {
-                const activatedWinners = new Array<Entrant>();
+        const maxLevel = Math.max.apply(null, this.entrants.map(entrant => entrant.level));
+        const CAP = [3, 5, 7, 5, 7];
+        let nextLevelEntrantsCount = 0;
+        Array.from(this.drawState.levels)
+            .sort(([aNo], [bNo]) => bNo - aNo)
+            .filter(([levelNo]) => levelNo < maxLevel && levelNo >= maxLevel - CAP.length)
+            .forEach(([levelNo, level]) => {
+                const activatedEntrants = new Array<Entrant>();
                 level.entrants.forEach(entrant => {
-                    if (entrant.activation >= this.drawState.activationThreshold) {
-                        activatedWinners.push(entrant);
+                    if (entrant.activated) {
+                        activatedEntrants.push(entrant);
                     }
                 });
-                if (this.drawState.remainingCount < activatedWinners.length) {
-                    activatedWinners.sort((a, b) => b.activation - a.activation);
-                    activatedWinners.slice(this.drawState.remainingCount).forEach(entrant => {
-                        entrant.activation = this.drawState.activationThreshold * 0.9;
-                    });
+
+                // Check to avoid excessive winners
+                if (levelNo === this.drawState.totalLevels - 1) {
+                    if (this.drawState.remainingCount < activatedEntrants.length) {
+                        activatedEntrants.sort((a, b) => b.activation - a.activation);
+                        activatedEntrants.slice(this.drawState.remainingCount).forEach(entrant => {
+                            entrant.activated = false;
+                        });
+                        activatedEntrants.splice(this.drawState.remainingCount);
+                    }
+                    nextLevelEntrantsCount = level.entrants.size - activatedEntrants.length;
+                } else if (levelNo < maxLevel) {
+                    // curbs on top levels
+                    const cap = CAP[maxLevel - levelNo - 1];
+                    const vacancy = cap - nextLevelEntrantsCount;
+                    if (activatedEntrants.length > vacancy) {
+                        activatedEntrants.sort((a, b) => b.activation - a.activation);
+                        activatedEntrants.slice(vacancy).forEach(entrant => {
+                            entrant.activated = false;
+                        });
+                        activatedEntrants.splice(vacancy);
+                    }
+                    nextLevelEntrantsCount = level.entrants.size - activatedEntrants.length;
                 }
-            }
-        })
+            });
+
+
     }
 
     public step_motion() {
         const activatedEntrant = new Set<Entrant>();
 
         this.entrants.forEach(entrant => {
-            if (entrant.activation >= this.drawState.activationThreshold) {
+            if (entrant.activated) {
                 activatedEntrant.add(entrant);
+                entrant.activated = false;
             }
         });
 
@@ -243,7 +286,7 @@ class Scene {
             this.camera.bottom += 1;
         }
         this.entrants.forEach(entrant => {
-            if (entrant.activation >= this.drawState.activationThreshold) {
+            if (entrant.activated) {
                 entrant.activation -= this.drawState.activationThreshold;
             } else {
                 entrant.activation *= this.drawState.attenuation;

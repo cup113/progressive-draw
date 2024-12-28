@@ -12,7 +12,7 @@ export interface AwardPreset {
   activationRate: number;
   animateIntervalMs: number;
   attenuation: number;
-}
+};
 
 export type AwardPresetDescriptor = {
   [K in keyof AwardPreset]: {
@@ -30,6 +30,12 @@ export type AwardPresetDescriptor = {
     max?: never;
     step?: never;
   });
+};
+
+type ExchangeableSettings = {
+  nameList: string[];
+  presets: AwardPreset[];
+  activePresetId: string;
 }
 
 const AWARD_DESCRIPTOR: AwardPresetDescriptor = {
@@ -85,6 +91,35 @@ export const useSettingsStore = defineStore('settings', () => {
     }
   }
 
+  function export_settings() {
+    const data: ExchangeableSettings = {
+      nameList: nameList.value,
+      presets: presets.value,
+      activePresetId: activePresetId.value,
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "progressive-draw-settings.json";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  }
+
+  function import_settings(settings?: File) {
+    if (!settings) {
+      return;
+    }
+    const reader = new FileReader();
+    reader.readAsText(settings);
+    reader.onload = () => {
+      const data: ExchangeableSettings = JSON.parse(reader.result as string);
+      nameList.value = data.nameList;
+      presets.value = data.presets;
+      activePresetId.value = data.activePresetId;
+    }
+  }
+
   return {
     AWARD_DESCRIPTOR,
     nameList,
@@ -94,5 +129,7 @@ export const useSettingsStore = defineStore('settings', () => {
     add_preset,
     delete_preset,
     update_preset,
+    export_settings,
+    import_settings,
   }
 });

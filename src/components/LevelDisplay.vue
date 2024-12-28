@@ -8,8 +8,8 @@ const props = defineProps<{
 
 const entrants = useEntrantsStore();
 
-const START_HSL = [209, 67, 92];
-const END_HSL = [4, 85, 92];
+const START_HSL = [235, 45, 92];
+const END_HSL = [1, 85, 92];
 
 const isTopLevel = computed(() => props.levelNo === entrants.scene.drawState.totalLevels);
 
@@ -30,7 +30,8 @@ const style = computed(() => {
 </script>
 
 <template>
-    <div class="w-full absolute flex items-center justify-center text-gray-500 border-t-2 border-dashed" :style="style">
+    <div class="w-full absolute flex items-center justify-between px-12 text-gray-500 border-t-2 border-dashed" :style="style">
+        <div class="text-2xl font-bold opacity-50">{{ levelNo }}</div>
         <div class="text-2xl font-bold opacity-50">{{ levelNo }}</div>
     </div>
 </template>
