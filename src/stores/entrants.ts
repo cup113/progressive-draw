@@ -31,7 +31,6 @@ export class Entrant {
 
     public win(no: number) {
         this.wonNo = no;
-        this.horizontalPosition = 0; // TODO list a line
         this.activation = 0;
     }
 }
@@ -41,6 +40,7 @@ type Camera = { bottom: number, levels: number };
 type DrawState = {
     totalLevels: number;
     levels: Map<number, Level>;
+    topLevel: Level;
     activationRate: number;
     activationThreshold: number;
     totalCount: number;
@@ -60,15 +60,12 @@ class Level {
     public entrants: Set<Entrant>;
 
     constructor(entrants: Set<Entrant>) {
-        this.entrants = entrants;
-        const size = entrants.size;
-        if (size % 2 === 0) {
-            this.leftMost = -size / 2;
-            this.rightMost = size / 2 - 1;
-        } else {
-            this.leftMost = (size - 1) / 2;
-            this.rightMost = (size + 1) / 2;
-        }
+        this.entrants = new Set();
+        this.leftMost = 1;
+        this.rightMost = 0;
+        entrants.forEach(entrant => {
+            this.addEntrant(entrant);
+        });
     }
 
     public removeEntrant(entrant: Entrant) {
@@ -94,7 +91,7 @@ class Level {
 
     public addEntrant(entrant: Entrant) {
         this.entrants.add(entrant);
-        const placeRight = (-this.leftMost) > this.rightMost;
+        const placeRight = (-this.leftMost) >= this.rightMost;
         if (placeRight) {
             this.rightMost += 1;
             entrant.horizontalPosition = this.rightMost;
@@ -127,6 +124,7 @@ class Scene {
             startTimestamp: Date.now(),
             winners: new Set<Entrant>(),
             levels: new Map<number, Level>(),
+            topLevel: new Level(new Set()),
         };
         this.entrants = entrants;
     }
@@ -144,12 +142,14 @@ class Scene {
         this.drawState.winners.clear();
         this.drawState.levels.clear();
         this.drawState.levels.set(1, new Level(new Set(this.entrants)));
+        this.drawState.topLevel = new Level(new Set());
 
         this.entrants.forEach(entrant => entrant.reset());
     }
 
     public async start_animate(preset: AwardPreset, onFinish: (draw: HistoryDraw) => void) {
         this.reset(preset);
+        await sleep(500);
 
         while (this.active) {
             this.step_activate();
@@ -215,6 +215,7 @@ class Scene {
 
             entrant.level += 1;
             if (entrant.level >= this.drawState.totalLevels) {
+                this.drawState.topLevel.addEntrant(entrant);
                 entrant.win(this.drawState.winners.size + 1);
                 this.drawState.winners.add(entrant);
                 this.drawState.remainingCount -= 1;
@@ -261,7 +262,7 @@ export const useEntrantsStore = defineStore("entrants", () => {
 
     const levels = computed(() => {
         const _levels = new Array<number>();
-        for (let i = scene.camera.bottom; i < scene.drawState.totalLevels && _levels.length < scene.camera.levels; i++) {
+        for (let i = scene.camera.bottom; i <= scene.drawState.totalLevels && _levels.length < scene.camera.levels; i++) {
             _levels.push(i);
         }
         return _levels.reverse();
