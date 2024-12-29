@@ -95,8 +95,8 @@ export const useSettingsStore = defineStore('settings', () => {
       wonScale: 1.3,
       activatedBaseScale: 1.2,
       scaleFactor: 0.3,
-      hueFactor: 60,
-      saturationFactor: 60,
+      hueFactor: 40,
+      saturationFactor: 35,
       lightness: 70,
     },
     level: {

@@ -85,19 +85,14 @@ function start_animate() {
     <section v-show="(!entrants.scene.active) && (history.historyDraws.length)"
       class="flex flex-col gap-4 items-center">
       <h2 class="text-center text-2xl font-bold">历史记录</h2>
-      <ul class="flex flex-col gap-2">
+      <ul class="grid grid-cols-2 gap-2">
         <li v-for="record, index in history.historyDraws" :key="record.awardName + record.durationSec"
           class="flex items-center gap-1 bg-slate-200 rounded-xl px-4 py-2">
           <div class="flex items-center gap-1">
             <div class="font-bold">{{ record.awardName }}</div>
             <div>{{ record.durationSec.toFixed(0) }}秒</div>
             <div>{{ record.winners.length }}人</div>
-            <div class="grid grid-cols-5 gap-2">
-              <div v-for="winner in record.winners" :key="winner.name + winner.detail"
-                class="bg-lime-300 rounded-lg py-1 px-2 text-center">
-                {{ history.to_full_name(winner) }}</div>
-            </div>
-            <div><Button variant="destructive" @click="history.remove_history(index)">删除</Button></div>
+            <div><Button class="bg-sky-600 hover:bg-sky-500" @click="history.remove_history(index)">删除</Button></div>
           </div>
         </li>
       </ul>

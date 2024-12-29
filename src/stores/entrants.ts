@@ -163,6 +163,10 @@ class Scene {
         return Math.max.apply(null, this.get_participated_entrants().map(entrant => entrant.level));
     }
 
+    public get_second_max_level() {
+        return this.get_participated_entrants().map(entrant => entrant.level).sort((a, b) => b - a)[1] ?? 0;
+    }
+
     public reset(preset: AwardPreset, uiParams: UiParams, pastWinners: Set<string>) {
         this.active = true;
         this.camera.bottom = 1;
@@ -191,7 +195,7 @@ class Scene {
         await sleep(this.drawState.baseDurationMs * 2);
 
         while (this.active) {
-            this.drawState.currentDurationMs = this.drawState.baseDurationMs * (0.6 + this.get_max_level() / this.drawState.totalLevels * 0.7);
+            this.drawState.currentDurationMs = this.drawState.baseDurationMs * (0.95 + this.get_max_level() / this.drawState.totalLevels * 0.1);
             this.step_activate();
             await sleep(this.drawState.currentDurationMs);
             this.step_motion();
@@ -225,7 +229,7 @@ class Scene {
         let nextLevelEntrantsCount = 0;
         Array.from(this.drawState.levels)
             .sort(([aNo], [bNo]) => bNo - aNo)
-            .filter(([levelNo]) => levelNo < maxLevel && levelNo >= maxLevel - this.drawState.levelCountCap.length)
+            .filter(([levelNo]) => levelNo !== this.drawState.totalLevels && levelNo >= maxLevel - this.drawState.levelCountCap.length)
             .forEach(([levelNo, level]) => {
                 const activatedEntrants = new Array<Entrant>();
                 level.entrants.forEach(entrant => {
@@ -256,6 +260,14 @@ class Scene {
                         activatedEntrants.splice(vacancy);
                     }
                     nextLevelEntrantsCount = level.entrants.size - activatedEntrants.length;
+                } else {
+                    const secondLevel = this.get_second_max_level();
+                    if (maxLevel - secondLevel >= 2) {
+                        // to prevent the first from getting too far
+                        level.entrants.forEach(entrant => {
+                            entrant.activated = false;
+                        })
+                    }
                 }
             });
     }

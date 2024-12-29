@@ -50,7 +50,7 @@ const style = computed(() => {
     const moveAxis = (displayLevel - camera.bottom + params.entrant.elevation) / camera.levels;
     const scale = won.value ? params.entrant.wonScale : ((entrant.activated ? params.entrant.activatedBaseScale : 1) + entrant.activation * params.entrant.scaleFactor);
     const hue = won.value ? 63 : entrant.activation * params.entrant.hueFactor + (f(0) - params.entrant.hueFactor * 0.8);
-    const saturation = won.value ? 100 : entrant.activation * params.entrant.saturationFactor + Math.max(f(1) - 30, 0);
+    const saturation = won.value ? 100 : entrant.activation * params.entrant.saturationFactor + Math.max(f(1) - 35, 0);
 
     return {
         'bottom': `${moveAxis * 100}%`,
