@@ -7,6 +7,7 @@ import { useMediaControls } from '@vueuse/core';
 
 import EntrantDisplay from '@/components/EntrantDisplay.vue';
 import LevelDisplay from '@/components/LevelDisplay.vue';
+import ParamAdjust from '@/components/ParamAdjust.vue';
 import { Button } from '@/components/ui/button';
 import { computed, ref, watch } from 'vue';
 
@@ -98,9 +99,10 @@ function start_animate() {
       </ul>
       <div><Button @click="history.export_history()">导出历史记录</Button></div>
     </section>
-    <div>
-      <Button v-if="isFullscreen" @click="exit" class="absolute top-2 right-2">退出全屏</Button>
-      <Button v-else @click="enter" class="absolute top-2 right-2">全屏</Button>
+    <div class="absolute top-2 right-2 flex gap-2">
+      <Button v-if="isFullscreen" @click="exit">退出全屏</Button>
+      <Button v-else @click="enter">全屏</Button>
+      <ParamAdjust v-if="!isFullscreen"></ParamAdjust>
     </div>
   </main>
 </template>
