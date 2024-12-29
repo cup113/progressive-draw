@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { computed, reactive, watch } from "vue";
 import { useSettingsStore } from "./settings";
-import type { AwardPreset } from "./settings";
+import type { AwardPreset, UiParams } from "./settings";
 import type { HistoryDraw } from "./history";
 
 export class Entrant {
@@ -59,9 +59,13 @@ type DrawState = {
     activationThreshold: number;
     totalCount: number;
     remainingCount: number;
+    baseDurationMs: number;
+    currentDurationMs: number;
     attenuation: number;
     startTimestamp: number;
+    levelCountCap: number[];
     winners: Set<Entrant>;
+    pastWinners: Set<string>;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -135,51 +139,74 @@ class Scene {
             totalCount: 0,
             remainingCount: 0,
             attenuation: 0.3,
+            baseDurationMs: 500,
+            currentDurationMs: 500,
             startTimestamp: Date.now(),
             winners: new Set<Entrant>(),
+            pastWinners: new Set<string>(),
             levels: new Map<number, Level>(),
+            levelCountCap: [3, 5, 7, 5, 7],
             topLevel: new Level(new Set()),
         };
         this.entrants = entrants;
     }
 
-    public reset(preset: AwardPreset) {
-        // TODO remove won entrant
+    public get_participated_entrants() {
+        return this.entrants.filter(entrant => !this.drawState.pastWinners.has(entrant.getFullName()));
+    }
 
+    public get_underway_entrants() {
+        return this.get_participated_entrants().filter(entrant => !entrant.getWon());
+    }
+
+    public get_max_level() {
+        return Math.max.apply(null, this.get_participated_entrants().map(entrant => entrant.level));
+    }
+
+    public reset(preset: AwardPreset, uiParams: UiParams, pastWinners: Set<string>) {
         this.active = true;
         this.camera.bottom = 1;
         this.camera.levels = preset.displayLevels;
         this.drawState.activationRate = preset.activationRate;
         this.drawState.activationThreshold = 1;
+        this.drawState.baseDurationMs = preset.animateIntervalMs;
+        this.drawState.currentDurationMs = preset.animateIntervalMs;
+        this.drawState.totalLevels = preset.totalLevels;
         this.drawState.totalCount = preset.totalCount;
         this.drawState.remainingCount = preset.totalCount;
         this.drawState.attenuation = preset.attenuation;
         this.drawState.startTimestamp = Date.now();
         this.drawState.winners.clear();
         this.drawState.levels.clear();
-        this.drawState.levels.set(1, new Level(new Set(this.entrants)));
+        this.drawState.pastWinners = pastWinners;
+        this.drawState.levelCountCap = uiParams.level.cap;
         this.drawState.topLevel = new Level(new Set());
+        this.drawState.levels.set(1, new Level(new Set(this.get_participated_entrants())));
 
-        this.entrants.forEach(entrant => entrant.reset());
+        this.get_participated_entrants().forEach(entrant => entrant.reset());
     }
 
-    public async start_animate(preset: AwardPreset, onFinish: (draw: HistoryDraw) => void) {
-        this.reset(preset);
-        await sleep(500);
+    public async start_animate(preset: AwardPreset, uiParams: UiParams, pastWinners: Set<string>, onFinish: (draw: HistoryDraw) => void) {
+        this.reset(preset, uiParams, pastWinners);
+        await sleep(this.drawState.baseDurationMs * 2);
 
         while (this.active) {
+            this.drawState.currentDurationMs = this.drawState.baseDurationMs * (0.6 + this.get_max_level() / this.drawState.totalLevels * 0.7);
             this.step_activate();
-            await sleep(500); // TODO configurable
+            await sleep(this.drawState.currentDurationMs);
             this.step_motion();
-            await sleep(500);
+            await sleep(this.drawState.currentDurationMs);
             this.step_home();
-            await sleep(500);
+            await sleep(this.drawState.currentDurationMs);
         }
+
+        this.step_fall();
+        await sleep(this.drawState.baseDurationMs * 2);
 
         const historyDraw: HistoryDraw = {
             awardName: preset.awardName,
             durationSec: (Date.now() - this.drawState.startTimestamp) / 1000,
-            winners: Array.from(this.drawState.winners).map(entrant => entrant.getFullName()),
+            winners: Array.from(this.drawState.winners),
         };
         onFinish(historyDraw);
     }
@@ -187,19 +214,18 @@ class Scene {
     public step_activate() {
         this.drawState.activationThreshold = 1 - this.drawState.activationRate;
 
-        this.entrants.filter(entrant => !entrant.getWon()).forEach(entrant => {
+        this.get_underway_entrants().forEach(entrant => {
             entrant.activation += Math.random();
             if (entrant.activation >= this.drawState.activationThreshold) {
                 entrant.activated = true;
             }
         });
 
-        const maxLevel = Math.max.apply(null, this.entrants.map(entrant => entrant.level));
-        const CAP = [3, 5, 7, 5, 7];
+        const maxLevel = this.get_max_level();
         let nextLevelEntrantsCount = 0;
         Array.from(this.drawState.levels)
             .sort(([aNo], [bNo]) => bNo - aNo)
-            .filter(([levelNo]) => levelNo < maxLevel && levelNo >= maxLevel - CAP.length)
+            .filter(([levelNo]) => levelNo < maxLevel && levelNo >= maxLevel - this.drawState.levelCountCap.length)
             .forEach(([levelNo, level]) => {
                 const activatedEntrants = new Array<Entrant>();
                 level.entrants.forEach(entrant => {
@@ -220,7 +246,7 @@ class Scene {
                     nextLevelEntrantsCount = level.entrants.size - activatedEntrants.length;
                 } else if (levelNo < maxLevel) {
                     // curbs on top levels
-                    const cap = CAP[maxLevel - levelNo - 1];
+                    const cap = this.drawState.levelCountCap[maxLevel - levelNo - 1];
                     const vacancy = cap - nextLevelEntrantsCount;
                     if (activatedEntrants.length > vacancy) {
                         activatedEntrants.sort((a, b) => b.activation - a.activation);
@@ -232,24 +258,19 @@ class Scene {
                     nextLevelEntrantsCount = level.entrants.size - activatedEntrants.length;
                 }
             });
-
-
     }
 
     public step_motion() {
         const activatedEntrant = new Set<Entrant>();
 
-        this.entrants.forEach(entrant => {
+        this.get_underway_entrants().forEach(entrant => {
             if (entrant.activated) {
                 activatedEntrant.add(entrant);
                 entrant.activated = false;
             }
         });
 
-        activatedEntrant.forEach(entrant => {
-            if (entrant.getWon()) {
-                return;
-            }
+        activatedEntrant.forEach(async entrant => {
             const currentLevel = this.drawState.levels.get(entrant.level);
             if (!currentLevel) {
                 throw TypeError(`Level ${entrant.level} not found`);
@@ -281,16 +302,22 @@ class Scene {
     }
 
     public step_home() {
-        const maxLevel = Math.max.apply(null, this.entrants.map(entrant => entrant.level));
+        const maxLevel = this.get_max_level();
         if (this.camera.bottom + this.camera.levels - 2 <= maxLevel) {
             this.camera.bottom += 1;
         }
-        this.entrants.forEach(entrant => {
+        this.get_participated_entrants().forEach(entrant => {
             if (entrant.activated) {
                 entrant.activation -= this.drawState.activationThreshold;
             } else {
                 entrant.activation *= this.drawState.attenuation;
             }
+        });
+    }
+
+    public step_fall() {
+        this.get_participated_entrants().filter(entrant => !entrant.getWon()).forEach(entrant => {
+            entrant.level = Math.max(0, this.camera.bottom - 1);
         });
     }
 }

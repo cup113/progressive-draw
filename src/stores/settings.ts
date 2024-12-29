@@ -12,7 +12,27 @@ export interface AwardPreset {
   activationRate: number;
   animateIntervalMs: number;
   attenuation: number;
-};
+}
+
+export interface UiParams {
+  entrant: {
+    baseMiddle: number;
+    baseSubMiddle: number;
+    elevation: number;
+    widthPercentage: number;
+    wonScale: number;
+    activatedBaseScale: number;
+    scaleFactor: number;
+    hueFactor: number;
+    saturationFactor: number;
+    lightness: number;
+  };
+  level: {
+    startHSL: [number, number, number];
+    endHSL: [number, number, number];
+    cap: number[];
+  }
+}
 
 export type AwardPresetDescriptor = {
   [K in keyof AwardPreset]: {
@@ -66,6 +86,25 @@ export const useSettingsStore = defineStore('settings', () => {
   const nameList = useLocalStorage('PD_nameList', new Array<string>());
   const presets = useLocalStorage('PD_presets', [get_default_award_preset()]);
   const activePresetId = useLocalStorage('PD_activePresetId', presets.value[0].id);
+  const uiParams = useLocalStorage<UiParams>('PD_uiParams', {
+    entrant: {
+      baseMiddle: 46.5,
+      baseSubMiddle: 51.5,
+      elevation: 0.25,
+      widthPercentage: 10,
+      wonScale: 1.3,
+      activatedBaseScale: 1.2,
+      scaleFactor: 0.3,
+      hueFactor: 60,
+      saturationFactor: 60,
+      lightness: 70,
+    },
+    level: {
+      startHSL: [235, 45, 92],
+      endHSL: [1, 85, 92],
+      cap: [3, 5, 7, 5, 7],
+    }
+  });
   const currentPreset = computed(() => {
     return presets.value.find(preset => preset.id === activePresetId.value) ?? get_default_award_preset();
   });
@@ -126,6 +165,7 @@ export const useSettingsStore = defineStore('settings', () => {
     presets,
     activePresetId,
     currentPreset,
+    uiParams,
     add_preset,
     delete_preset,
     update_preset,
