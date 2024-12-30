@@ -195,7 +195,7 @@ class Scene {
         await sleep(this.drawState.baseDurationMs * 2);
 
         while (this.active) {
-            this.drawState.currentDurationMs = this.drawState.baseDurationMs * (0.95 + this.get_max_level() / this.drawState.totalLevels * 0.1);
+            this.drawState.currentDurationMs = this.drawState.baseDurationMs * (0.9 + this.get_max_level() / this.drawState.totalLevels * 0.2);
             this.step_activate();
             await sleep(this.drawState.currentDurationMs);
             this.step_motion();
@@ -262,7 +262,7 @@ class Scene {
                     nextLevelEntrantsCount = level.entrants.size - activatedEntrants.length;
                 } else {
                     const secondLevel = this.get_second_max_level();
-                    if (maxLevel - secondLevel >= 2) {
+                    if (maxLevel - secondLevel >= 3) {
                         // to prevent the first from getting too far
                         level.entrants.forEach(entrant => {
                             entrant.activated = false;
