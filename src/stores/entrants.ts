@@ -195,7 +195,9 @@ class Scene {
         await sleep(this.drawState.baseDurationMs * 2);
 
         while (this.active) {
-            this.drawState.currentDurationMs = this.drawState.baseDurationMs * (0.9 + this.get_max_level() / this.drawState.totalLevels * 0.2);
+            const maxLevel = this.get_max_level();
+            const speed = (maxLevel === this.drawState.totalLevels ? 0.7 : (1.2 - maxLevel / this.drawState.totalLevels * 0.3));
+            this.drawState.currentDurationMs = this.drawState.baseDurationMs / speed;
             this.step_activate();
             await sleep(this.drawState.currentDurationMs);
             this.step_motion();
@@ -204,8 +206,7 @@ class Scene {
             await sleep(this.drawState.currentDurationMs);
         }
 
-        this.step_fall();
-        await sleep(this.drawState.baseDurationMs * 2);
+        // this.step_fall();
 
         const historyDraw: HistoryDraw = {
             awardName: preset.awardName,
@@ -240,12 +241,13 @@ class Scene {
 
                 // Check to avoid excessive winners
                 if (levelNo === this.drawState.totalLevels - 1) {
-                    if (this.drawState.remainingCount < activatedEntrants.length) {
+                    const cap = Math.ceil(this.drawState.remainingCount / 3);
+                    if (cap < activatedEntrants.length) {
                         activatedEntrants.sort((a, b) => b.activation - a.activation);
-                        activatedEntrants.slice(this.drawState.remainingCount).forEach(entrant => {
+                        activatedEntrants.slice(cap).forEach(entrant => {
                             entrant.activated = false;
                         });
-                        activatedEntrants.splice(this.drawState.remainingCount);
+                        activatedEntrants.splice(cap);
                     }
                     nextLevelEntrantsCount = level.entrants.size - activatedEntrants.length;
                 } else if (levelNo < maxLevel) {

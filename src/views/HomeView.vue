@@ -29,17 +29,17 @@ watch(() => entrants.scene.active, (newValue) => {
         clearInterval(handle);
         playing.value = false;
       }
-    }, 150);
+    }, 250);
   }
   if (newValue) {
     playing.value = true;
     volume.value = 0;
     const handle = setInterval(() => {
       volume.value += 0.01;
-      if (volume.value >= 0.12) {
+      if (volume.value >= 0.1) {
         clearInterval(handle);
       }
-    }, 150);
+    }, 250);
   }
 })
 
